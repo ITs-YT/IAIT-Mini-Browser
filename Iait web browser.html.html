@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IAIT Rapid Chat</title>
+<style>
+body {
+    margin: 0;
+    background: #0b0f14;
+    color: #00e5ff;
+    font-family: Arial;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.top {
+    display: flex;
+    padding: 10px;
+    background: #111822;
+    gap: 10px;
+    border-bottom: 2px solid #00e5ff;
+}
+
+input {
+    flex: 1;
+    padding: 10px;
+    background: #000;
+    border: 2px solid #00e5ff;
+    color: #00e5ff;
+    font-size: 14px;
+}
+
+button {
+    padding: 10px 20px;
+    background: #00e5ff;
+    border: none;
+    color: #000;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.info {
+    width: 40%;
+    padding: 20px;
+    background: #0a0f14;
+    border-right: 2px solid #00e5ff;
+    overflow-y: auto;
+}
+
+.chat-section {
+    width: 60%;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    background: #000;
+    border: 2px solid #00e5ff;
+    margin-bottom: 10px;
+    padding: 10px;
+}
+
+.message {
+    background: #111822;
+    margin: 5px 0;
+    padding: 8px;
+    border-left: 3px solid #00e5ff;
+    animation: fadeIn 0.2s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0.5; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.message-author {
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.message-content {
+    color: #fff;
+    margin: 3px 0;
+}
+
+.message-time {
+    color: #888;
+    font-size: 11px;
+    text-align: right;
+}
+
+.chat-input {
+    display: flex;
+    gap: 10px;
+}
+
+.chat-input input {
+    flex: 1;
+}
+
+.chat-input button {
+    background: #00ff88;
+}
+
+.status {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: #00ff88;
+    color: #000;
+    padding: 5px 10px;
+    font-size: 12px;
+    border-radius: 3px;
+}
+
+.typing-indicator {
+    color: #00e5ff;
+    font-size: 12px;
+    font-style: italic;
+    margin: 5px 0;
+    height: 20px;
+}
+
+.new-message {
+    animation: highlight 0.5s;
+}
+
+@keyframes highlight {
+    0% { background: #1a2f44; }
+    100% { background: #111822; }
+}
+</style>
+</head>
+<body>
+
+<div class="status" id="status">🟢 Live</div>
+
+<div class="top">
+  <input id="url" value="https://www.facebook.com/iaitdotcom">
+  <button onclick="openSite()">OPEN</button>
+</div>
+
+<div class="container">
+  <div class="info">
+    <h2 style="color: #00ff88;">IAIT MINI BROWSER</h2>
+    <p><strong>GROUP:</strong> KIPPO_WALL MAGAZINE</p>
+    <p><strong>TEAM:</strong><br>
+    • SHAH DEEN HOSSEN SMAROK<br>
+    • AHYAN CHOWDURY SWADREE<br>
+    • QUAZI MD. ZAEEM AMIN</p>
+    <p><strong>SCHOOL:</strong> IDEAL SCHOOL AND COLLEGE</p>
+    <p><strong>CLUB:</strong> IAIT</p>
+  </div>
+
+  <div class="chat-section">
+    <div style="text-align: center; color: #00e5ff; margin: 10px 0; font-size: 18px;">
+      💬 RAPID CHAT - INSTANT MESSAGING
+    </div>
+    
+    <div class="chat-messages" id="chatMessages">
+      <div class="message">
+        <div class="message-author">System</div>
+        <div class="message-content">Chat loaded! Messages appear instantly for everyone.</div>
+        <div class="message-time">Now</div>
+      </div>
+    </div>
+    
+    <div class="typing-indicator" id="typingIndicator"></div>
+    
+    <div class="chat-input">
+      <input type="text" id="userName" placeholder="Your name (type & press Enter)" value="">
+      <input type="text" id="messageInput" placeholder="Type message & press Enter" onkeypress="if(event.key=='Enter')sendMessage()">
+      <button onclick="sendMessage()">SEND</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================= ULTRA SIMPLE REAL-TIME CHAT =================
+// Using Supabase (free, fast, no setup)
+const SUPABASE_URL = 'https://rwkqbzkwxsflwdrjrgfk.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3a3Fiemt3eHNmbHdkcmpyZ2ZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzUzNjkwNDgsImV4cCI6MjA1MDk0NTA0OH0.fkKdJhQ8IlJJvT-Vm1HGG5Wb5tJh6I_QUlnopg5rI8s';
+
+// Chat variables
+let currentUser = localStorage.getItem('chatUser') || '';
+let lastMessageId = 0;
+let typingTimeout;
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    if (currentUser) {
+        document.getElementById('userName').value = currentUser;
+    }
+    
+    // Focus on message input
+    document.getElementById('messageInput').focus();
+    
+    // Start listening for messages
+    startMessageListener();
+    
+    // Enter key for name
+    document.getElementById('userName').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            setUserName();
+        }
+    });
+    
+    // Typing indicator
+    document.getElementById('messageInput').addEventListener('input', userIsTyping);
+});
+
+// Typing indicator function
+function userIsTyping() {
+    if (!currentUser) return;
+    
+    // Send typing signal
+    sendTypingSignal(currentUser);
+    
+    // Clear previous timeout
+    clearTimeout(typingTimeout);
+    
+    // Set timeout to clear typing after 2 seconds
+    typingTimeout = setTimeout(() => {
+        clearTypingSignal(currentUser);
+    }, 2000);
+}
+
+// Send typing signal
+async function sendTypingSignal(user) {
+    try {
+        await fetch(`${SUPABASE_URL}/rest/v1/typing`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({
+                user: user,
+                is_typing: true,
+                timestamp: new Date().toISOString()
+            })
+        });
+    } catch (e) {
+        // Silent fail
+    }
+}
+
+// Clear typing signal
+async function clearTypingSignal(user) {
+    try {
+        await fetch(`${SUPABASE_URL}/rest/v1/typing?user=eq.${encodeURIComponent(user)}`, {
+            method: 'DELETE',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        });
+    } catch (e) {
+        // Silent fail
+    }
+}
+
+// Check for typing users
+function checkTypingUsers() {
+    fetch(`${SUPABASE_URL}/rest/v1/typing?timestamp=gt.${new Date(Date.now() - 3000).toISOString()}`, {
+        headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+    })
+    .then(r => r.json())
+    .then(typingUsers => {
+        const indicator = document.getElementById('typingIndicator');
+        const currentTyping = typingUsers.filter(u => u.user !== currentUser);
+        
+        if (currentTyping.length > 0) {
+            const names = currentTyping.map(u => u.user).join(', ');
+            indicator.textContent = `${names} ${currentTyping.length === 1 ? 'is' : 'are'} typing...`;
+        } else {
+            indicator.textContent = '';
+        }
+    });
+}
+
+// Set user name
+function setUserName() {
+    const name = document.getElementById('userName').value.trim();
+    if (name) {
+        currentUser = name;
+        localStorage.setItem('chatUser', name);
+        document.getElementById('messageInput').focus();
+        addSystemMessage(`Welcome ${name}! Start chatting.`);
+    }
+}
+
+// Send message - INSTANT
+async function sendMessage() {
+    const messageInput = document.getElementById('messageInput');
+    const message = messageInput.value.trim();
+    
+    if (!message) return;
+    
+    if (!currentUser) {
+        setUserName();
+        return;
+    }
+    
+    // Clear typing indicator
+    clearTypingSignal(currentUser);
+    
+    // Create message
+    const msg = {
+        user: currentUser,
+        text: message,
+        time: new Date().toISOString(),
+        id: Date.now()
+    };
+    
+    // Show immediately (optimistic update)
+    addMessage(msg.user, msg.text, msg.time, true);
+    messageInput.value = '';
+    
+    // Send to server (async, don't wait)
+    fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(msg)
+    }).catch(e => console.log('Sync in background'));
+}
+
+// Listen for messages - REAL TIME
+async function startMessageListener() {
+    // Check typing every second
+    setInterval(checkTypingUsers, 1000);
+    
+    // First load existing messages
+    fetch(`${SUPABASE_URL}/rest/v1/chat_messages?order=id.desc&limit=50`, {
+        headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+    })
+    .then(r => r.json())
+    .then(messages => {
+        messages.reverse().forEach(msg => {
+            if (msg.id > lastMessageId) {
+                addMessage(msg.user, msg.text, msg.time);
+                lastMessageId = msg.id;
+            }
+        });
+    });
+    
+    // Real-time updates (WebSocket)
+    const ws = new WebSocket('wss://rwkqbzkwxsflwdrjrgfk.supabase.co/realtime/v1/websocket?apikey=' + SUPABASE_KEY);
+    
+    ws.onopen = () => {
+        ws.send(JSON.stringify({
+            event: 'phx_join',
+            payload: {},
+            topic: 'realtime:public:chat_messages',
+            ref: '1'
+        }));
+    };
+    
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.event === 'INSERT') {
+            const msg = data.payload.new;
+            if (msg.id > lastMessageId) {
+                addMessage(msg.user, msg.text, msg.time);
+                lastMessageId = msg.id;
+            }
+        }
+    };
+    
+    // Fallback polling (every 1 second - SUPER FAST)
+    setInterval(() => {
+        fetch(`${SUPABASE_URL}/rest/v1/chat_messages?order=id.desc&limit=5`, {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`
+            }
+        })
+        .then(r => r.json())
+        .then(messages => {
+            messages.forEach(msg => {
+                if (msg.id > lastMessageId) {
+                    addMessage(msg.user, msg.text, msg.time);
+                    lastMessageId = msg.id;
+                }
+            });
+        });
+    }, 1000); // CHECK EVERY SECOND!
+}
+
+// Display message - INSTANT
+function addMessage(user, text, time, isOwn = false) {
+    const chat = document.getElementById('chatMessages');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message ' + (isOwn ? 'new-message' : '');
+    
+    const date = new Date(time);
+    const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+    msgDiv.innerHTML = `
+        <div class="message-author">${escapeHtml(user)}</div>
+        <div class="message-content">${escapeHtml(text)}</div>
+        <div class="message-time">${timeStr}</div>
+    `;
+    
+    chat.appendChild(msgDiv);
+    
+    // Auto-scroll
+    chat.scrollTop = chat.scrollHeight;
+    
+    // Sound notification for new messages (optional)
+    if (!isOwn && document.hasFocus()) {
+        playNotificationSound();
+    }
+}
+
+// Notification sound
+function playNotificationSound() {
+    try {
+        const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
+        audio.volume = 0.3;
+        audio.play();
+    } catch(e) {}
+}
+
+function addSystemMessage(text) {
+    addMessage('System', text, new Date().toISOString());
+}
+
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function openSite() {
+    let url = document.getElementById("url").value;
+    if (!url.startsWith("http")) url = "https://" + url;
+    window.open(url, "_blank");
+}
+</script>
+
+</body>
+</html>
